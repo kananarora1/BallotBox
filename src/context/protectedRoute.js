@@ -17,7 +17,6 @@ const ProtectedRoute = ({ adminOnly = false }) => {
     };
   }, [account]);
 
-  // Determine routing logic
   if (isLoading) {
     return <div>Verifying wallet details...</div>;
   }
@@ -25,8 +24,7 @@ const ProtectedRoute = ({ adminOnly = false }) => {
   if (!account) {
     return <Navigate to="/" replace />;
   }
-
-  // Admin-only route check
+  
   if (adminOnly && !adminCheck.isAdmin) {
     return <Navigate to="/voter" replace />;
   }
