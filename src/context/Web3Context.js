@@ -11,22 +11,16 @@ export const Web3Provider = ({ children }) => {
   const connectWallet = async () => {
     setIsLoading(true);
     try {
-      // Check if MetaMask is installed
       if (window.ethereum) {
-        // Request account access
-        const accounts = await window.ethereum.request({ 
-          method: 'eth_requestAccounts' 
-        });
-
-        // Create web3 instance
-        const web3 = new Web3(window.ethereum);
-        setWeb3Instance(web3);
-
-        // Set the first account
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         if (accounts.length > 0) {
           const connectedAccount = accounts[0];
           setAccount(connectedAccount);
           console.log('Wallet connected:', connectedAccount);
+
+          // Create web3 instance
+          const web3 = new Web3(window.ethereum);
+          setWeb3Instance(web3);
         }
       } else {
         console.error('MetaMask not found');
@@ -39,31 +33,36 @@ export const Web3Provider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Attempt to connect wallet on component mount
     connectWallet();
 
     // Add event listener for account changes
+    const handleAccountsChanged = (newAccounts) => {
+      if (newAccounts.length > 0) {
+        setAccount(newAccounts[0]);
+      } else {
+        setAccount(null);
+      }
+    };
+
+    const handleChainChanged = () => {
+      window.location.reload();
+    };
+
     if (window.ethereum) {
-      window.ethereum.on('accountsChanged', (accounts) => {
-        setAccount(accounts[0] || null);
-      });
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
     }
 
-    // Cleanup listener
     return () => {
       if (window.ethereum) {
-        window.ethereum.removeListener('accountsChanged', () => {});
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
       }
     };
   }, []);
 
   return (
-    <Web3Context.Provider value={{ 
-      account, 
-      isLoading, 
-      web3: web3Instance, 
-      connectWallet 
-    }}>
+    <Web3Context.Provider value={{ account, isLoading, web3: web3Instance, connectWallet }}>
       {children}
     </Web3Context.Provider>
   );

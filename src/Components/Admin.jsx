@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, ResponsiveContainer } from 'recharts';
 import { PlusIcon, ChartBarIcon } from '@heroicons/react/24/solid';
 import { getContract } from '../utils/contract';
 
@@ -21,46 +21,52 @@ const AdminDashboard = () => {
     party: '',
     area: ''
   });
+  const [selectedElectionStats, setSelectedElectionStats] = useState(null);
 
   // Function to fetch and update election statistics
   const updateElectionStats = async () => {
     try {
       const contract = await getContract();
       const electionCount = await contract.electionCount();
-      
-      // Fetch election details first
-      const electionPromises = [];
+
+      const fetchedElections = [];
+      const statsList = [];
+
+      // Fetch elections and their stats sequentially
       for (let i = 1; i <= electionCount; i++) {
-        electionPromises.push(contract.elections(i));
+        const election = await contract.elections(i);
+        fetchedElections.push(election);
+
+        // Fetch candidates and results for each election
+        const candidates = await contract.getCandidates(election.id);
+        const results = await contract.getCurrentResults(election.id);
+
+        statsList.push({
+          name: election.name,
+          results: candidates.map((candidate, j) => ({
+            name: candidate.name,
+            votes: results[j].voteCount.toNumber()
+          })),
+          electionId: election.id.toNumber(),
+          endTime: election.endTime.toNumber()
+        });
       }
-      const fetchedElections = await Promise.all(electionPromises);
-      
-      // Update elections state
+
       setElections(fetchedElections);
-
-      // Then fetch candidates and results
-      const statsPromises = fetchedElections.map((_, index) =>
-        Promise.all([
-          contract.getCandidates(index + 1),
-          contract.getCurrentResults(index + 1)
-        ])
-      );
-
-      const statsList = await Promise.all(statsPromises);
-      const formattedStats = statsList.map(([candidates, results], idx) => ({
-        name: fetchedElections[idx].name,
-        results: candidates.map((candidate, i) => ({
-          name: candidate.name,
-          votes: results[i].voteCount.toNumber()
-        }))
-      }));
-
-      setElectionStats(formattedStats);
+      setElectionStats(statsList);
     } catch (error) {
       console.error('Error updating election statistics:', error);
-      // Clear stats if there's an error
       setElectionStats([]);
     }
+  };
+
+  const handleElectionSelect = (electionId) => {
+    const selectedId = Number(electionId);
+    setSelectedElectionId(selectedId);
+
+    const selectedStats = electionStats.find((stat) => stat.electionId === selectedId);
+    console.log('Selected election stats:', selectedStats);
+    setSelectedElectionStats(selectedStats);
   };
 
   // Fetching elections from the blockchain
@@ -69,7 +75,7 @@ const AdminDashboard = () => {
       try {
         const contract = await getContract();
         const electionCount = await contract.electionCount();
-        
+
         const promises = [];
         for (let i = 1; i <= electionCount; i++) {
           promises.push(contract.elections(i));
@@ -86,7 +92,6 @@ const AdminDashboard = () => {
           console.log('Vote event detected:', electionId, voter);
           await updateElectionStats();
         });
-
       } catch (error) {
         console.error('Error fetching elections:', error);
       }
@@ -95,7 +100,44 @@ const AdminDashboard = () => {
     fetchElections();
   }, []);
 
-  // Rest of the component remains the same as in the previous version
+  // Function to declare results for an election
+  const declareResults = async () => {
+    if (!account || !selectedElectionId) {
+      alert('Please connect wallet and select an election');
+      return;
+    }
+
+    try {
+      const contract = await getContract();
+      const election = elections.find(e => e.id === selectedElectionId);
+
+      // Only declare results if the election has ended
+      if (Date.now() < election.endTime * 1000) {
+        alert('Election has not ended yet!');
+        return;
+      }
+
+      // Check if the election status is valid
+      if (election.status !== "Valid") {
+        alert('Election is either canceled or invalid.');
+        return;
+      }
+
+      // Declare the results
+      const { maxVotes, winner } = await contract.getResults(selectedElectionId);
+      console.log('Election Results:', winner, 'Votes:', maxVotes);
+
+      // Handle successful result declaration
+      alert(`The winner is: ${winner.name} with ${maxVotes} votes`);
+
+      // Update the election stats
+      await updateElectionStats();
+    } catch (error) {
+      console.error('Error declaring election results:', error);
+      alert('Error declaring results: ' + error.message);
+    }
+  };
+
   const handleAddElection = async () => {
     if (!account) {
       alert('Please connect wallet first');
@@ -113,7 +155,7 @@ const AdminDashboard = () => {
 
       setElections([...elections, { ...newElection, id: electionId }]);
       setNewElection({ name: '', startTime: '', endTime: '' });
-      
+
       // Update stats after adding a new election
       await updateElectionStats();
     } catch (error) {
@@ -147,15 +189,13 @@ const AdminDashboard = () => {
 
       setCandidates([...candidates, { name, party, area }]);
       setCandidateDetails({ name: '', party: '', area: '' });
-      
-      // Update stats after adding a candidate
+
       await updateElectionStats();
     } catch (error) {
       console.error('Candidate addition failed:', error);
     }
   };
 
-  // Render method remains the same as in the previous version
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="container mx-auto">
@@ -209,7 +249,10 @@ const AdminDashboard = () => {
               <select
                 className="w-full p-3 border rounded-lg"
                 value={selectedElectionId}
-                onChange={(e) => setSelectedElectionId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedElectionId(e.target.value);
+                  handleElectionSelect(e.target.value);
+                }}
               >
                 <option value="">Select Election</option>
                 {elections.map((election) => (
@@ -257,26 +300,104 @@ const AdminDashboard = () => {
           {/* Election Statistics */}
           <div className="bg-white shadow-lg rounded-2xl p-6 col-span-full">
             <h2 className="text-2xl font-semibold mb-6">Election Statistics</h2>
-            {electionStats.length > 0 ? (
-              <BarChart width={800} height={400} data={electionStats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                {electionStats.map((election, electionIdx) => 
-                  election.results.map((result, resultIdx) => (
-                    <Bar 
-                      key={`${electionIdx}-${resultIdx}`} 
-                      dataKey={`results[${resultIdx}].votes`} 
-                      name={result.name} 
-                      fill="#8884d8" 
+
+            {/* Election Selection Dropdown */}
+            <div className="mb-6">
+              <select
+                className="w-full p-3 border rounded-lg"
+                value={selectedElectionId}
+                onChange={(e) => handleElectionSelect(e.target.value)}
+              >
+                <option value="">Select Election</option>
+                {elections.map((election) => (
+                  <option key={election.id} value={election.id}>
+                    {election.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Bar Chart and Pie Chart for the selected election */}
+            {selectedElectionStats && selectedElectionStats.results.length > 0 ? (
+              <div className="flex flex-col md:flex-row gap-8">
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart 
+                    data={selectedElectionStats.results} 
+                    margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="name" 
+                      label={{ value: 'Candidates', position: 'insideBottom', offset: -10 }}
                     />
-                  ))
-                )}
-              </BarChart>
+                    <YAxis 
+                      label={{ 
+                        value: 'Number of Votes', 
+                        angle: -90, 
+                        position: 'insideLeft', 
+                        offset: 0 
+                      }} 
+                    />
+                    <Tooltip 
+                      formatter={(value, name) => [value, 'Votes']}
+                      cursor={{ fill: 'rgba(0, 0, 0, 0.1)' }}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      height={36}
+                    />
+                    <Bar 
+                      dataKey="votes" 
+                      fill="#8884d8" 
+                      activeBar={{ stroke: 'blue', strokeWidth: 2 }}
+                    >
+                      {selectedElectionStats.results.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`}
+                          fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'][index % 5]}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+
+                <ResponsiveContainer width="100%" height={400}>
+                  <PieChart>
+                    <Pie
+                      data={selectedElectionStats.results}
+                      dataKey="votes"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={120}
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    >
+                      {selectedElectionStats.results.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'][index % 5]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value, name) => [value, 'Votes']}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
-              <p>No election statistics available</p>
+              <p className="text-center text-gray-500">No statistics available for this election.</p>
+            )}
+
+            {/* Declare Result Button only if election is over */}
+            {selectedElectionStats && Date.now() > selectedElectionStats.endTime * 1000 && (
+              <button
+                onClick={declareResults}
+                className="w-full mt-6 bg-red-600 text-white p-3 rounded-lg hover:bg-red-700"
+              >
+                Declare Results
+              </button>
             )}
           </div>
         </div>
