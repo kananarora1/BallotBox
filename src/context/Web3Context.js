@@ -5,54 +5,59 @@ const Web3Context = createContext(null);
 
 export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // Avoid "perpetual loading" issues
   const [web3Instance, setWeb3Instance] = useState(null);
+  const [error, setError] = useState(null);
 
+  // Function to handle wallet connection
   const connectWallet = async () => {
-    setIsLoading(true);
     try {
+      setIsLoading(true);
       if (!window.ethereum) {
-        throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
+        throw new Error('MetaMask is not installed. Please install it to connect your wallet.');
       }
 
-      // Request wallet accounts
+      // Request accounts
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       if (accounts.length === 0) {
-        throw new Error('No wallet account found.');
+        throw new Error('No accounts found. Please unlock MetaMask.');
       }
 
-      // Set the connected account
-      const connectedAccount = accounts[0];
-      setAccount(connectedAccount);
-      console.log('Wallet connected:', connectedAccount);
+      setAccount(accounts[0]);
 
-      // Set up Web3 instance
+      // Initialize Web3
       const web3 = new Web3(window.ethereum);
       setWeb3Instance(web3);
-    } catch (error) {
-      console.error('Wallet connection error:', error.message);
+
+      console.log('Connected to wallet:', accounts[0]);
+    } catch (err) {
+      console.error('Error connecting wallet:', err.message);
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Function to check existing wallet connection
   useEffect(() => {
     const checkWalletConnection = async () => {
       try {
+        setIsLoading(true);
+
         if (window.ethereum && window.ethereum.isMetaMask) {
           const accounts = await window.ethereum.request({ method: 'eth_accounts' });
           if (accounts.length > 0) {
-            const existingAccount = accounts[0];
-            setAccount(existingAccount);
-            console.log('Existing wallet connection found:', existingAccount);
+            setAccount(accounts[0]);
 
-            // Create Web3 instance for existing connection
+            // Set up Web3
             const web3 = new Web3(window.ethereum);
             setWeb3Instance(web3);
+
+            console.log('Existing connection found:', accounts[0]);
           }
         }
-      } catch (error) {
-        console.error('Error checking wallet connection:', error.message);
+      } catch (err) {
+        console.error('Error checking wallet connection:', err.message);
       } finally {
         setIsLoading(false);
       }
@@ -60,18 +65,20 @@ export const Web3Provider = ({ children }) => {
 
     checkWalletConnection();
 
-    // Add wallet event listeners
+    // Wallet event listeners
     const handleAccountsChanged = (newAccounts) => {
       if (newAccounts.length > 0) {
         setAccount(newAccounts[0]);
       } else {
         setAccount(null);
+        setWeb3Instance(null);
       }
     };
 
     const handleChainChanged = () => {
-      console.log('Network changed, reloading...');
-      window.location.reload();
+      console.log('Network changed, refreshing connection...');
+      setAccount(null);
+      setWeb3Instance(null);
     };
 
     if (window.ethereum) {
@@ -88,7 +95,7 @@ export const Web3Provider = ({ children }) => {
   }, []);
 
   return (
-    <Web3Context.Provider value={{ account, isLoading, web3: web3Instance, connectWallet }}>
+    <Web3Context.Provider value={{ account, isLoading, web3: web3Instance, connectWallet, error }}>
       {children}
     </Web3Context.Provider>
   );
