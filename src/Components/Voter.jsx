@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
+import { useNavigate } from 'react-router-dom'; // For navigation
 import { ChartBarIcon } from '@heroicons/react/24/solid';
 import { getContract } from '../utils/contract';
 
 const VoterDashboard = () => {
   const { account } = useWeb3();
+  const navigate = useNavigate(); // Navigation hook for routing
   const [contract, setContract] = useState(null);
   const [elections, setElections] = useState([]);
   const [selectedElectionId, setSelectedElectionId] = useState('');
@@ -17,6 +19,8 @@ const VoterDashboard = () => {
       try {
         const contractInstance = await getContract();
         setContract(contractInstance);
+        const elections = await contractInstance.elections(1);
+        console.log(elections);
       } catch (error) {
         console.error('Error initializing contract:', error);
       }
@@ -84,41 +88,37 @@ const VoterDashboard = () => {
       // Refresh candidates to update vote count
       const updatedCandidates = await contract.getCandidates(selectedElectionId);
       setCandidates(updatedCandidates);
-    }catch (error) {
-      // Log the full error object for debugging
-      console.log('Full error object:', error);
-      console.log('Error message:', error.message);
-      console.log('Error name:', error.name);
-  
-      // Try multiple ways to extract a meaningful error message
+    } catch (error) {
+      console.error('Error during voting:', error);
       let errorReason = 'An unknown error occurred';
-  
-      // Check if it's an ethers.js error with a reason
       if (error.reason) {
         errorReason = error.reason;
-      } 
-      // Check for error message with 'revert' or 'reason'
-      else if (error.message) {
+      } else if (error.message && error.message.includes('revert')) {
         const revertMatch = error.message.match(/revert\s*(.+)$/i);
-        if (revertMatch) {
-          errorReason = revertMatch[1].trim();
-        }
+        errorReason = revertMatch ? revertMatch[1].trim() : errorReason;
       }
-      if(errorReason == "execution reverted: You have already voted."){
-        errorReason = "You have already voted. Please wait for the results.";
+      if (errorReason === 'execution reverted: You have already voted.') {
+        errorReason = 'You have already voted. Please wait for the results.';
       }
-      // Set the most specific error reason found
       setVoteStatus(errorReason);
-    }  
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="container mx-auto">
-        <h1 className="text-4xl font-bold mb-8 flex items-center">
-          <ChartBarIcon className="w-10 h-10 mr-4 text-blue-600" />
-          Voter Dashboard
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold flex items-center">
+            <ChartBarIcon className="w-10 h-10 mr-4 text-blue-600" />
+            Voter Dashboard
+          </h1>
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            onClick={() => navigate('/results')} // Navigate to /results
+          >
+            View Past Election Results
+          </button>
+        </div>
 
         <div className="grid md:grid-cols-2 gap-8">
           {/* Election Selection */}

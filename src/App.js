@@ -6,6 +6,7 @@ import { Web3Provider } from './context/Web3Context';
 import ProtectedRoute from './context/protectedRoute';
 import AdminDashboard from './Components/Admin';
 import VoterDashboard from './Components/Voter';
+import ResultPage from './Components/Result';
 
 function App() {
   return(
@@ -18,6 +19,9 @@ function App() {
           </Route>
           <Route element ={<ProtectedRoute/>}>
             <Route path="/voter" element={<VoterDashboard/>}/>
+          </Route>
+          <Route element={<ProtectedRoute/>}>
+            <Route path="/results" element={<ResultPage/>}/>
           </Route>
         </Routes>
       </Router>

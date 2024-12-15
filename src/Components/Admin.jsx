@@ -22,6 +22,7 @@ const AdminDashboard = () => {
     area: ''
   });
   const [selectedElectionStats, setSelectedElectionStats] = useState(null);
+  const [isResultDeclared, setIsResultDeclared] = useState(false);
 
   // Function to fetch and update election statistics
   const updateElectionStats = async () => {
@@ -69,7 +70,6 @@ const AdminDashboard = () => {
     setSelectedElectionStats(selectedStats);
   };
 
-  // Fetching elections from the blockchain
   useEffect(() => {
     const fetchElections = async () => {
       try {
@@ -83,8 +83,6 @@ const AdminDashboard = () => {
 
         const electionList = await Promise.all(promises);
         setElections(electionList);
-
-        // Update stats after fetching elections
         await updateElectionStats();
 
         // Set up a listener for Voted event to update stats
@@ -100,43 +98,80 @@ const AdminDashboard = () => {
     fetchElections();
   }, []);
 
+  useEffect(() => {
+    if (!selectedElectionId) {
+      return;
+    }
+    const resultsDeclared = async (electionId) => {
+      try {
+        const contract = await getContract();
+        console.log('Contract:', contract);
+        
+        console.log(contract.isResultDeclared(electionId));
+        const result = await contract.isResultDeclared(electionId);
+        setIsResultDeclared(result);
+        console.log('Results declared:', result);
+        return result;
+      } catch (error) {
+        console.error('Error in resultsDeclared:', error);
+        return false;
+      }
+    };
+    resultsDeclared(selectedElectionId);
+  }, [selectedElectionId]);
+
+
   // Function to declare results for an election
   const declareResults = async () => {
     if (!account || !selectedElectionId) {
       alert('Please connect wallet and select an election');
       return;
     }
-
+  
     try {
       const contract = await getContract();
-      const election = elections.find(e => e.id === selectedElectionId);
-
-      // Only declare results if the election has ended
-      if (Date.now() < election.endTime * 1000) {
+      const election = elections.find(e => e.id.toNumber() === selectedElectionId);
+      console.log('Selected Election:', election);
+  
+      if (!election) {
+        console.error('Election not found');
+        alert('Election not found');
+        return;
+      }
+  
+      const electionEndTime = election.endTime.toNumber() * 1000;
+  
+      if (Date.now() < electionEndTime) {
         alert('Election has not ended yet!');
         return;
       }
-
-      // Check if the election status is valid
-      if (election.status !== "Valid") {
-        alert('Election is either canceled or invalid.');
-        return;
-      }
-
-      // Declare the results
-      const { maxVotes, winner } = await contract.getResults(selectedElectionId);
-      console.log('Election Results:', winner, 'Votes:', maxVotes);
-
-      // Handle successful result declaration
-      alert(`The winner is: ${winner.name} with ${maxVotes} votes`);
-
-      // Update the election stats
+  
+      console.log('Declaring results for election:', selectedElectionId);
+      
+      // Listen for ResultDeclared event
+      contract.on('ResultDeclared', (electionId, maxVotes, winner) => {
+        if (electionId.toNumber() === selectedElectionId) {
+          console.log(`Election ${electionId} results declared!`);
+          console.log('Max Votes:', maxVotes.toString());
+          console.log('Winner:', winner);
+          
+          // Here you can update the frontend state based on the winner and max votes
+          alert(`Winner: ${winner.name}, Votes: ${maxVotes.toString()}`);
+        }
+      });
+  
+      // Declare the results by triggering the smart contract function
+      await contract.getResults(selectedElectionId);
+      
+      // After declaring the results, ensure to update the election stats
       await updateElectionStats();
+      
     } catch (error) {
       console.error('Error declaring election results:', error);
       alert('Error declaring results: ' + error.message);
     }
   };
+  
 
   const handleAddElection = async () => {
     if (!account) {
@@ -156,7 +191,6 @@ const AdminDashboard = () => {
       setElections([...elections, { ...newElection, id: electionId }]);
       setNewElection({ name: '', startTime: '', endTime: '' });
 
-      // Update stats after adding a new election
       await updateElectionStats();
     } catch (error) {
       console.error('Election creation failed:', error);
@@ -242,7 +276,6 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Candidate Addition Section */}
           <div className="bg-white shadow-lg rounded-2xl p-6">
             <h2 className="text-2xl font-semibold mb-6">Add Candidates</h2>
             <div className="space-y-4">
@@ -255,11 +288,14 @@ const AdminDashboard = () => {
                 }}
               >
                 <option value="">Select Election</option>
-                {elections.map((election) => (
-                  <option key={election.id} value={election.id}>
-                    {election.name}
-                  </option>
-                ))}
+                  {elections.map((election) => (
+                    election.startTime && 
+                      new Date(election.startTime).getTime() >= Date.now() ? (
+                        <option key={election.id} value={election.id}>
+                          {election.name}
+                        </option>
+                      ) : null
+                  ))}
               </select>
               <input
                 type="text"
@@ -297,11 +333,9 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Election Statistics */}
           <div className="bg-white shadow-lg rounded-2xl p-6 col-span-full">
             <h2 className="text-2xl font-semibold mb-6">Election Statistics</h2>
 
-            {/* Election Selection Dropdown */}
             <div className="mb-6">
               <select
                 className="w-full p-3 border rounded-lg"
@@ -310,15 +344,16 @@ const AdminDashboard = () => {
               >
                 <option value="">Select Election</option>
                 {elections.map((election) => (
+                  !isResultDeclared ? (
                   <option key={election.id} value={election.id}>
                     {election.name}
                   </option>
+                  ) : null
                 ))}
               </select>
             </div>
 
-            {/* Bar Chart and Pie Chart for the selected election */}
-            {selectedElectionStats && selectedElectionStats.results.length > 0 ? (
+            {selectedElectionStats && !isResultDeclared && selectedElectionStats.results.length > 0 ? (
               <div className="flex flex-col md:flex-row gap-8">
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart 
@@ -390,8 +425,7 @@ const AdminDashboard = () => {
               <p className="text-center text-gray-500">No statistics available for this election.</p>
             )}
 
-            {/* Declare Result Button only if election is over */}
-            {selectedElectionStats && Date.now() > selectedElectionStats.endTime * 1000 && (
+            {selectedElectionStats && !isResultDeclared && Date.now() > selectedElectionStats.endTime * 1000 && (
               <button
                 onClick={declareResults}
                 className="w-full mt-6 bg-red-600 text-white p-3 rounded-lg hover:bg-red-700"

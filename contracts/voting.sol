@@ -5,6 +5,7 @@ contract Voting {
     address public admin;
     uint public electionCount; 
     mapping(uint => Election) public elections;
+    mapping (uint => bool) public isResultDeclared;
 
     constructor() {
         admin = msg.sender;
@@ -99,6 +100,7 @@ contract Voting {
     function getResults(uint electionId) public onlyAdmin returns (uint maxVotes, Candidate memory winner) {
         require(electionId > 0 && electionId <= electionCount, "Invalid election ID");
         Election storage election = elections[electionId];
+        require(!isResultDeclared[electionId], "The resukt of this election has already been declared");
         require(block.timestamp >= election.endTime, "Election has not ended, Try again after the ending time");
         require(election.status != ElectionStatus.Canceled, "The Election was cancelled");
         
@@ -111,6 +113,7 @@ contract Voting {
         }
 
         emit ResultDeclared(electionId, maxVotes, winner);
+        isResultDeclared[electionId] = true;
 
         return(maxVotes, winner);
     }
