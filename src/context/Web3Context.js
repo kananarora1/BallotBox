@@ -11,31 +11,56 @@ export const Web3Provider = ({ children }) => {
   const connectWallet = async () => {
     setIsLoading(true);
     try {
-      if (window.ethereum) {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        if (accounts.length > 0) {
-          const connectedAccount = accounts[0];
-          setAccount(connectedAccount);
-          console.log('Wallet connected:', connectedAccount);
-
-          // Create web3 instance
-          const web3 = new Web3(window.ethereum);
-          setWeb3Instance(web3);
-        }
-      } else {
-        console.error('MetaMask not found');
+      if (!window.ethereum) {
+        throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
       }
+
+      // Request wallet accounts
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (accounts.length === 0) {
+        throw new Error('No wallet account found.');
+      }
+
+      // Set the connected account
+      const connectedAccount = accounts[0];
+      setAccount(connectedAccount);
+      console.log('Wallet connected:', connectedAccount);
+
+      // Set up Web3 instance
+      const web3 = new Web3(window.ethereum);
+      setWeb3Instance(web3);
     } catch (error) {
-      console.error('Wallet connection error:', error);
+      console.error('Wallet connection error:', error.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    connectWallet();
+    const checkWalletConnection = async () => {
+      try {
+        if (window.ethereum && window.ethereum.isMetaMask) {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts.length > 0) {
+            const existingAccount = accounts[0];
+            setAccount(existingAccount);
+            console.log('Existing wallet connection found:', existingAccount);
 
-    // Add event listener for account changes
+            // Create Web3 instance for existing connection
+            const web3 = new Web3(window.ethereum);
+            setWeb3Instance(web3);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking wallet connection:', error.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkWalletConnection();
+
+    // Add wallet event listeners
     const handleAccountsChanged = (newAccounts) => {
       if (newAccounts.length > 0) {
         setAccount(newAccounts[0]);
@@ -45,6 +70,7 @@ export const Web3Provider = ({ children }) => {
     };
 
     const handleChainChanged = () => {
+      console.log('Network changed, reloading...');
       window.location.reload();
     };
 
