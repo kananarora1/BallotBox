@@ -344,16 +344,14 @@ const AdminDashboard = () => {
               >
                 <option value="">Select Election</option>
                 {elections.map((election) => (
-                  !isResultDeclared ? (
                   <option key={election.id} value={election.id}>
                     {election.name}
                   </option>
-                  ) : null
                 ))}
               </select>
             </div>
 
-            {selectedElectionStats && !isResultDeclared && selectedElectionStats.results.length > 0 ? (
+            {selectedElectionStats && selectedElectionStats.results.length > 0 ? (
               <div className="flex flex-col md:flex-row gap-8">
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart 
@@ -425,7 +423,7 @@ const AdminDashboard = () => {
               <p className="text-center text-gray-500">No statistics available for this election.</p>
             )}
 
-            {selectedElectionStats && !isResultDeclared && Date.now() > selectedElectionStats.endTime * 1000 && (
+            {selectedElectionStats && !isResultDeclared && Date.now() >= selectedElectionStats.endTime * 1000 && (
               <button
                 onClick={declareResults}
                 className="w-full mt-6 bg-red-600 text-white p-3 rounded-lg hover:bg-red-700"

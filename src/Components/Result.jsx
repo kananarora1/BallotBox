@@ -21,7 +21,7 @@ const ResultPage = () => {
   const [selectedElectionId, setSelectedElectionId] = useState("");
   const [results, setResults] = useState([]);
   const [message, setMessage] = useState("Please select an election to view the results.");
-  const [isResultDeclared, setIsResultDeclared] = useState(false);
+  const [winner, setWinner] = useState(null);
 
   const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8A2BE2", "#FF4500"];
 
@@ -45,71 +45,58 @@ const ResultPage = () => {
     }
   };
 
-  const fetchResults = async (electionId) => {
+  const fetchCandidateResults = async (electionId) => {
     try {
       const contract = await getContract();
       
-      // Check if results are declared
-      const resultDeclared = await contract.isResultDeclared(electionId);
-      setIsResultDeclared(resultDeclared);
+      // Fetch candidates for the specific election
+      const candidates = await contract.getCandidates(electionId);
 
-      if (resultDeclared) {
-        // Fetch candidates and their votes
-        const candidates = await contract.getCandidates(electionId);
-        const voteCounts = await contract.getCurrentResults(electionId);
+      // Create results array with candidate details and votes
+      const resultsData = candidates.map((candidate, index) => ({
+        name: candidate.name,
+        party: candidate.politicalParty,
+        area: candidate.area,
+        votes: candidate.voteCount.toNumber(),
+      }));
 
-        const resultsData = candidates.map((candidate, index) => ({
-          name: candidate.name,
-          votes: candidate.voteCount.toNumber(),
-        }));
+      // Sort results in descending order of votes
+      const sortedResults = resultsData.sort((a, b) => b.votes - a.votes);
 
-        setResults(resultsData);
-        setMessage("");
-      } else {
-        setResults([]);
-        setMessage("Results have not been declared for this election.");
-      }
+      // Determine winner separately
+      const electionWinner = sortedResults.length > 0 ? sortedResults[0] : null;
+
+      return { results: sortedResults, winner: electionWinner };
     } catch (error) {
-      console.error("Error fetching results:", error);
-      setMessage("Error fetching results. Please try again.");
-    }
-  };
-
-  const handleElectionSelect = (id) => {
-    if (id) {
-      setSelectedElectionId(id);
-      setResults([]);
-      setMessage("Checking election results...");
-      fetchResults(id);
-    } else {
-      setSelectedElectionId("");
-      setResults([]);
-      setMessage("Please select an election to view the results.");
+      console.error("Error fetching candidate results:", error);
+      return { results: [], winner: null };
     }
   };
 
   useEffect(() => {
     fetchElections();
 
-    // Event Listener for ResultDeclared
+    // Setup event listener for ResultDeclared
     const setupResultListener = async () => {
       try {
         const contract = await getContract();
         
-        contract.on("ResultDeclared", async (electionId, maxVotes, winner) => {
+        contract.on("ResultDeclared", async (electionId, maxVotes, winnerCandidate) => {
           const updatedElectionId = electionId.toNumber();
           
           console.log("Result Declared Event:", {
             electionId: updatedElectionId,
             maxVotes: maxVotes.toString(),
-            winner: winner
+            winner: winnerCandidate
           });
 
-          // If the current selected election matches the event's election
-          if (updatedElectionId.toString() === selectedElectionId.toString()) {
-            // Re-fetch results for the selected election
-            await fetchResults(updatedElectionId);
-          }
+          // Fetch candidate results for the election
+          const { results: candidateResults, winner: electionWinner } = await fetchCandidateResults(updatedElectionId);
+          
+          setResults(candidateResults);
+          setWinner(electionWinner);
+          setMessage("");
+          setSelectedElectionId(updatedElectionId);
         });
       } catch (error) {
         console.error("Error setting up ResultDeclared listener:", error);
@@ -118,7 +105,7 @@ const ResultPage = () => {
 
     setupResultListener();
 
-    // Cleanup event listeners when the component unmounts
+    // Cleanup event listeners
     return () => {
       const cleanupListener = async () => {
         const contract = await getContract();
@@ -126,7 +113,48 @@ const ResultPage = () => {
       };
       cleanupListener();
     };
-  }, [selectedElectionId]);
+  }, []);
+
+  const handleElectionSelect = async (electionId) => {
+    if (!electionId) {
+      setSelectedElectionId("");
+      setResults([]);
+      setWinner(null);
+      setMessage("Please select an election to view the results.");
+      return;
+    }
+
+    try {
+      setSelectedElectionId(electionId);
+      setMessage("Fetching election results...");
+      
+      const contract = await getContract();
+      
+      // Check if results are declared for this election
+      const isResultDeclared = await contract.isResultDeclared(electionId);
+      
+      if (isResultDeclared) {
+        const { results: candidateResults, winner: electionWinner } = await fetchCandidateResults(electionId);
+        
+        if (candidateResults.length > 0) {
+          setResults(candidateResults);
+          setWinner(electionWinner);
+          setMessage("");
+        } else {
+          setMessage("No results available for this election.");
+          setWinner(null);
+        }
+      } else {
+        setMessage("Results have not been declared for this election.");
+        setResults([]);
+        setWinner(null);
+      }
+    } catch (error) {
+      console.error("Error fetching election results:", error);
+      setMessage("Error fetching results. Please try again.");
+      setWinner(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
@@ -149,70 +177,111 @@ const ResultPage = () => {
           </select>
         </div>
 
-        {/* Display results or message */}
+        {/* Display message */}
         {message && (
           <p className="text-lg text-gray-700 bg-yellow-200 p-4 rounded-lg shadow-sm">
             {message}
           </p>
         )}
 
+        {/* Results Display */}
         {results.length > 0 && (
           <div className="bg-white p-6 shadow-lg rounded-lg">
-            <h2 className="text-2xl font-semibold mb-4">Results Analysis</h2>
+            <h2 className="text-2xl font-semibold mb-4">Results Leaderboard</h2>
 
-            {/* Bar Chart */}
-            <div className="my-8">
-              <h3 className="text-xl font-semibold mb-2">Votes Distribution (Bar Chart)</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={results}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="name"
-                    label={{ value: "Candidates", position: "insideBottom", offset: -5 }}
-                  />
-                  <YAxis label={{ value: "Votes", angle: -90, position: "insideLeft" }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="votes" fill="#8884d8">
-                    {results.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Pie Chart */}
-            <div className="my-8">
-              <h3 className="text-xl font-semibold mb-2">Votes Distribution (Pie Chart)</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie
-                    data={results}
-                    dataKey="votes"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={120}
-                    fill="#8884d8"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {results.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-medium text-gray-800">Summary:</h3>
-              {results.map((result) => (
-                <p key={result.name} className="text-gray-600">
-                  {result.name}: <strong>{result.votes} votes</strong>
+            {/* Winner Highlight */}
+            {winner && (
+              <div className="bg-green-100 p-4 rounded-lg mb-6">
+                <h3 className="text-xl font-bold text-green-800">Election Winner</h3>
+                <p className="text-lg">
+                  <span className="font-semibold">{winner.name}</span> 
+                  {' '}with <span className="font-semibold">{winner.votes}</span> votes
                 </p>
-              ))}
+              </div>
+            )}
+
+
+            {/* Leaderboard Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="p-3 text-left">Rank</th>
+                    <th className="p-3 text-left">Candidate</th>
+                    <th className="p-3 text-left">Party</th>
+                    <th className="p-3 text-left">Area</th>
+                    <th className="p-3 text-right">Votes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((candidate, index) => (
+                    <tr 
+                      key={candidate.name} 
+                      className={`
+                        ${index === 0 ? 'bg-green-50' : ''}
+                        border-b hover:bg-gray-100
+                      `}
+                    >
+                      <td className="p-3 font-bold">{index + 1}</td>
+                      <td className="p-3">{candidate.name}</td>
+                      <td className="p-3">{candidate.party}</td>
+                      <td className="p-3">{candidate.area}</td>
+                      <td className="p-3 text-right font-semibold">{candidate.votes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Visualization */}
+            <div className="grid md:grid-cols-2 gap-8 mt-8">
+              {/* Bar Chart */}
+              <div>
+                <h3 className="text-xl font-semibold mb-4">Votes Distribution (Bar Chart)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={results}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="votes">
+                      {results.map((_, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={COLORS[index % COLORS.length]} 
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Pie Chart */}
+              <div>
+                <h3 className="text-xl font-semibold mb-4">Votes Distribution (Pie Chart)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={results}
+                      dataKey="votes"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      fill="#8884d8"
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    >
+                      {results.map((_, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={COLORS[index % COLORS.length]} 
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}

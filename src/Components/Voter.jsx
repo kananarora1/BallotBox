@@ -131,9 +131,10 @@ const VoterDashboard = () => {
             >
               <option value="">Choose an Election</option>
               {elections.map((election) => (
-                <option key={election.id} value={election.id}>
+                election.endTime * 1000 < Date.now() && election.startTime * 1000 > Date.now() ?
+                (<option key={election.id} value={election.id}>
                   {election.name}
-                </option>
+                </option>) : null
               ))}
             </select>
           </div>
