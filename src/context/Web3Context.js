@@ -30,21 +30,17 @@ export const Web3Provider = ({ children }) => {
       const web3 = new Web3(window.ethereum);
       setWeb3Instance(web3);
 
-      console.log('Connected to wallet:', accounts[0]);
     } catch (err) {
-      console.error('Error connecting wallet:', err.message);
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Function to check existing wallet connection
   useEffect(() => {
     const checkWalletConnection = async () => {
       try {
         setIsLoading(true);
-        console.log('Account in context:', account);
 
         if (window.ethereum && window.ethereum.isMetaMask) {
           const accounts = await window.ethereum.request({ method: 'eth_accounts' });
@@ -55,11 +51,10 @@ export const Web3Provider = ({ children }) => {
             const web3 = new Web3(window.ethereum);
             setWeb3Instance(web3);
 
-            console.log('Existing connection found:', accounts[0]);
           }
         }
       } catch (err) {
-        console.error('Error checking wallet connection:', err.message);
+        setError(err.message);
       } finally {
         setIsLoading(false);
       }
@@ -67,7 +62,6 @@ export const Web3Provider = ({ children }) => {
 
     checkWalletConnection();
 
-    // Wallet event listeners
     const handleAccountsChanged = (newAccounts) => {
       if (newAccounts.length > 0) {
         setAccount(newAccounts[0]);
@@ -78,7 +72,6 @@ export const Web3Provider = ({ children }) => {
     };
 
     const handleChainChanged = () => {
-      console.log('Network changed, refreshing connection...');
       setAccount(null);
       setWeb3Instance(null);
     };

@@ -56,7 +56,6 @@ const AdminDashboard = () => {
       setElections(fetchedElections);
       setElectionStats(statsList);
     } catch (error) {
-      console.error('Error updating election statistics:', error);
       setElectionStats([]);
     }
   };
@@ -66,7 +65,6 @@ const AdminDashboard = () => {
     setSelectedElectionId(selectedId);
 
     const selectedStats = electionStats.find((stat) => stat.electionId === selectedId);
-    console.log('Selected election stats:', selectedStats);
     setSelectedElectionStats(selectedStats);
   };
 
@@ -87,7 +85,6 @@ const AdminDashboard = () => {
 
         // Set up a listener for Voted event to update stats
         contract.on('Voted', async (electionId, voter) => {
-          console.log('Vote event detected:', electionId, voter);
           await updateElectionStats();
         });
       } catch (error) {
@@ -105,23 +102,18 @@ const AdminDashboard = () => {
     const resultsDeclared = async (electionId) => {
       try {
         const contract = await getContract();
-        console.log('Contract:', contract);
         
         console.log(contract.isResultDeclared(electionId));
         const result = await contract.isResultDeclared(electionId);
         setIsResultDeclared(result);
-        console.log('Results declared:', result);
         return result;
       } catch (error) {
-        console.error('Error in resultsDeclared:', error);
         return false;
       }
     };
     resultsDeclared(selectedElectionId);
   }, [selectedElectionId]);
 
-
-  // Function to declare results for an election
   const declareResults = async () => {
     if (!account || !selectedElectionId) {
       alert('Please connect wallet and select an election');
@@ -131,10 +123,8 @@ const AdminDashboard = () => {
     try {
       const contract = await getContract();
       const election = elections.find(e => e.id.toNumber() === selectedElectionId);
-      console.log('Selected Election:', election);
   
       if (!election) {
-        console.error('Election not found');
         alert('Election not found');
         return;
       }
@@ -145,8 +135,6 @@ const AdminDashboard = () => {
         alert('Election has not ended yet!');
         return;
       }
-  
-      console.log('Declaring results for election:', selectedElectionId);
       
       // Listen for ResultDeclared event
       contract.on('ResultDeclared', (electionId, maxVotes, winner) => {
@@ -167,7 +155,6 @@ const AdminDashboard = () => {
       await updateElectionStats();
       
     } catch (error) {
-      console.error('Error declaring election results:', error);
       alert('Error declaring results: ' + error.message);
     }
   };
@@ -193,7 +180,6 @@ const AdminDashboard = () => {
 
       await updateElectionStats();
     } catch (error) {
-      console.error('Election creation failed:', error);
       alert(`Failed to create election: ${error.message}`);
     }
   };

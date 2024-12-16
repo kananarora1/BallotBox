@@ -19,8 +19,6 @@ const VoterDashboard = () => {
       try {
         const contractInstance = await getContract();
         setContract(contractInstance);
-        const elections = await contractInstance.elections(1);
-        console.log(elections);
       } catch (error) {
         console.error('Error initializing contract:', error);
       }
@@ -50,7 +48,6 @@ const VoterDashboard = () => {
         const electionList = await Promise.all(electionPromises);
         setElections(electionList);
       } catch (error) {
-        console.error('Error fetching elections:', error);
       }
     };
 
@@ -131,7 +128,7 @@ const VoterDashboard = () => {
             >
               <option value="">Choose an Election</option>
               {elections.map((election) => (
-                election.endTime * 1000 < Date.now() && election.startTime * 1000 > Date.now() ?
+                new Date(Date.parse(election.endTime)).getTime() > Date.now() && new Date(Date.parse(election.startTime)).getTime() < Date.now() ?
                 (<option key={election.id} value={election.id}>
                   {election.name}
                 </option>) : null
