@@ -11,6 +11,9 @@ const ProtectedRoute = ({ adminOnly = false }) => {
 
     const adminAddress = process.env.REACT_APP_ADMIN_ADDRESS?.trim().toLowerCase();
     const currentAccount = account.toLowerCase();
+    console.log('Admin address:', adminAddress);
+    console.log('Current account:', currentAccount);
+    console.log('Is admin?', adminAddress === currentAccount);
     return {
       isAdmin: adminAddress === currentAccount,
     };

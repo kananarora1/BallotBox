@@ -5,7 +5,7 @@ const Web3Context = createContext(null);
 
 export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
-  const [isLoading, setIsLoading] = useState(false); // Avoid "perpetual loading" issues
+  const [isLoading, setIsLoading] = useState(true);
   const [web3Instance, setWeb3Instance] = useState(null);
   const [error, setError] = useState(null);
 
@@ -22,6 +22,7 @@ export const Web3Provider = ({ children }) => {
       if (accounts.length === 0) {
         throw new Error('No accounts found. Please unlock MetaMask.');
       }
+
 
       setAccount(accounts[0]);
 
@@ -43,6 +44,7 @@ export const Web3Provider = ({ children }) => {
     const checkWalletConnection = async () => {
       try {
         setIsLoading(true);
+        console.log('Account in context:', account);
 
         if (window.ethereum && window.ethereum.isMetaMask) {
           const accounts = await window.ethereum.request({ method: 'eth_accounts' });
